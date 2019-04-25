@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FreeBSD SVN Browser</title>
+  <link rel="icon" href="https://www.freebsd.org/favicon.ico" type="image/x-icon" />
+<style>
+body {
+  font-family: sans-serif;
+  font-size: 14px;
+}
+.Commit {
+  margin-bottom: 10px;
+}
+.Revision {
+  float: left;
+  color: red;
+}
+.Author {
+  float: left;
+  color: red;
+  margin-left: 5px;
+  margin-right: 50px;
+}
+.Date {
+  color: blue;
+}
+.Comment {
+  white-space: pre-wrap;
+  font-family: monospace;
+}
+.Separator {
+  width: 100%;
+  color: white;
+  background-color: darkblue;
+  padding: 2px;
+}
+.Match {
+  background-color: yellow;
+}
+.Error {
+  color: red;
+}
+a {
+  overflow-wrap: break-word;
+  word-break: break-all;
+}
+</style>
+  <script src="https://unpkg.com/react@16/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@16/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+  <script type='text/babel'>
+'use strict';
+
+var lastDate = null;
+
+function escapeHTML(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+class SearchForm extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {value: '', error: null};
+
+    this.handleChange = this.handleChange.bind(this);
+  }
+
+  handleChange(event) {
+      this.setState({value: event.target.value});
+    try {
+      const search = event.target.value == "" ? null : new RegExp(event.target.value, 'gim');
+      this.setState({error: null});
+      this.setState({search: search});
+    } catch(err) {
+      this.setState({error: err.message});
+      console.log("bla: " + err);
+    }
+  }
+
+  render() {
+    const err = this.state.error;
+    return (
+      <div>
+      <div style={{float: "inline-end"}}>
+      <form>
+          <input className={err != null ? "Error" : ""} type="text" placeholder="Search regex" value={this.state.value} onChange={this.handleChange} />
+        { err != null ? <div className="Error">{err}</div> : "" }
+      </form>
+      </div>
+      <Commits search={this.state.search}/>
+      </div>
+    );
+  }
+}
+
+function Commit(props) {
+  const paths = Array.isArray(props.commit.paths.path) ? props.commit.paths.path : [ props.commit.paths.path ];
+  var msg = props.commit.msg["$"];
+  msg = escapeHTML(msg);
+  msg = msg.replace(/https?:\/\/\S+/gi, '<a href="$&">$&</a>')
+           .replace(/\br(\d+)\b/gi, '<a href="https://svnweb.freebsd.org/base?view=revision&revision=$1">$&</a>')
+           .replace(/(PR:\s*)([0-9]+)/g, '$1<a href="https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=$2">$2</a>')
+           .replace(/([a-z0-9_.-]+)\(([0-9])\)/gi, '<a href="https://www.freebsd.org/cgi/man.cgi?query=$1&apropos=0&sektion=$2&manpath=FreeBSD+12-current&arch=default&format=html">$&</a>')
+           ;
+  if (props.search != null && props.search != "") {
+    try {
+      const search = props.search;
+      if (msg.search(search) < 0) {
+        return null;
+      }
+      msg = msg.replace(search, (match) => '<span class="Match">' + match + '</span>');
+    } catch(err) {
+      console.log("bla: " + err);
+    }
+  }
+  const d = new Date(props.commit.date["$"]).toDateString();
+  const separator = d != lastDate;
+  if (separator)
+    lastDate = d;
+  return (
+    <div className="Commit">
+      { separator ? <div className="Separator">{d}</div> : null }
+      <div className="Revision"><a href={"https://svnweb.freebsd.org/base?view=revision&revision=" + props.commit["@revision"]}>{props.commit["@revision"]}</a></div>
+      <div className="Author">{props.commit.author["$"]}</div>
+      <div className="Date">{new Date(props.commit.date["$"]).toTimeString()}</div>
+      <div className="Comment" dangerouslySetInnerHTML={{__html: msg}}></div>
+      <div>
+      {paths.map((path) =>
+        <div key={path["$"]} className="Path"><a href={"https://svnweb.freebsd.org/base/" + path["$"] + "#rev" + props.commit["@revision"]}>{path["$"]}</a></div>
+      )}
+      </div>
+    </div>
+  );
+}
+
+class Commits extends React.Component {
+  constructor(props) {
+    super(props);
+
+    this.state = {
+      error: false,
+      hasMore: true,
+      isLoading: false,
+      commits: [],
+      start: 0,
+      step: 0,
+      version: 0
+    };
+
+    window.onscroll = () => {
+      const {
+        getCommits,
+        state: {
+          error,
+          isLoading,
+          hasMore,
+        },
+      } = this;
+
+//console.log('onscroll ' + error + ' ' + isLoading + ' ' + hasMore);
+      // Bails early if:
+      // * there's an error
+      // * it's already loading
+      // * there's nothing left to load
+      if (error || isLoading || !hasMore) return;
+//console.log('onscroll 2');
+
+      // Checks that the page has scrolled to the bottom
+      if (
+        window.innerHeight + document.documentElement.scrollTop === document.documentElement.offsetHeight
+      ) {
+console.log('getcommits');
+        getCommits();
+      }
+    };
+  }
+
+/*  componentDidUpdate = () => {
+    var _this = this;
+    //wait for a paint to do scrolly stuff
+    window.setTimeout(
+    window.requestAnimationFrame(function() {
+      var elems = document.getElementsByClassName("Commit");
+      console.log("elems.length: " + elems.length);
+      if (elems.length > 0 && elems.length < _this.state.step) {
+        _this.getCommits();
+      }
+    })
+    , 0);
+  }
+*/
+  getCommits = () => {
+    this.setState({ isLoading: true }, () => {
+        const start = this.state.commits.length == 0 
+                             ? this.state.start
+                             : this.state.commits[this.state.commits.length - 1]['@revision'] - this.state.step;
+        const name = 'commits.' + start + '-' + (start + this.state.step - 1) + '.json'
+                     + '?version=' + this.state.version
+                     + (this.state.commits.length == 0 ? '&head=' + this.state.head : '');
+        console.log('fetch ' + name);
+        fetch('freebsd-data/' + name)
+            .then( (response) => {
+		if (!response.ok)
+			throw new Error("Something went wrong...");
+                return response.json();
+            })
+//            .then( (json) => {
+//                return json;
+//            })
+            .then((result) => {
+              const nextCommits = result.log.logentry;
+              const curCommits = this.state.commits;
+              this.setState({
+                hasMore: nextCommits[0]["@revision"] != 1,
+                isLoading: false,
+                commits: [
+                  ...curCommits,
+                  ...nextCommits.reverse(),
+                ]
+              })
+            })
+            .catch(error => this.setState({ error, isLoading: false }));
+    });
+  }
+
+  componentDidMount() {
+//return;
+        const name = 'bla.json?nocache=' + Date.now();
+console.log('fetch ' + name);
+        fetch('freebsd-data/' + name)
+            .then( (response) => {
+		if (!response.ok)
+			throw new Error("Something went wrong...");
+                return response.json();
+            })
+            .then((result) => {
+console.log('result.start: ' + result.start);
+              this.setState({
+                version: result.version,
+                start: result.start,
+                step: result.step,
+                head: result.head,
+              });
+            })
+            .then(() => {
+              this.getCommits()
+            })
+            .catch(error => this.setState({ error, isLoading: false }));
+  }
+
+  render() {
+ const {
+      error,
+      hasMore,
+      isLoading,
+      commits,
+    } = this.state;
+   return (
+      <div>
+      {commits.map((commit) =>
+        <Commit search={this.props.search} commit={commit} key={commit["@revision"].toString()}/>
+      )}
+        {error &&
+          <div style={{ color: '#900' }}>
+            {error}
+          </div>
+        }
+        {isLoading &&
+          <div>Loading...</div>
+        }
+        {!hasMore &&
+          <div>You did it! You reached the end!</div>
+        }
+      </div>
+    );
+  }
+}
+
+class App extends React.Component {
+  constructor(props) {
+    super(props);
+  }
+
+  render() {
+    return (
+      <SearchForm/>
+    );
+  }
+}
+
+function start() {
+  ReactDOM.render(<App/>, document.getElementById('root'));
+}
+  </script>
+</head>
+<body onload='start()'>
+  <div id='root'></div>
+</body>
+</html>
