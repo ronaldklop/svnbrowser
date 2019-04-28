@@ -62,9 +62,12 @@ function escapeHTML(s) {
 class SearchForm extends React.Component {
   constructor(props) {
     super(props);
-    this.state = {value: '', error: null};
+    this.state = { value: '', error: null,
+                   showHead: true, showStable: false, showProjects: false
+                 };
 
     this.handleChange = this.handleChange.bind(this);
+    this.handleInputChange = this.handleInputChange.bind(this);
   }
 
   handleChange(event) {
@@ -79,24 +82,44 @@ class SearchForm extends React.Component {
     }
   }
 
+  handleInputChange(event) {
+    const target = event.target;
+    const value = target.type === 'checkbox' ? target.checked : target.value;
+    const name = target.name;
+
+    this.setState({
+      [name]: value
+    });
+  }
+
   render() {
     const err = this.state.error;
     return (
       <div>
       <div style={{float: "inline-end"}}>
       <form>
-          <input className={err != null ? "Error" : ""} type="text" placeholder="Search regex" value={this.state.value} onChange={this.handleChange} />
+        <label><input type='checkbox' name='showHead'
+           defaultChecked={this.state.showHead}
+           onChange={this.handleInputChange}/>/head</label>
+        <label><input type='checkbox' name='showStable'
+          defaultChecked={this.state.showStable}
+          onChange={this.handleInputChange}/>/stable</label>
+        <label><input type='checkbox' name='showProjects'
+          defaultChecked={this.state.showProjects}
+          onChange={this.handleInputChange}/>/projects</label>
+        <input className={err != null ? "Error" : ""} type="text" placeholder="Search regex" value={this.state.value} onChange={this.handleChange} />
         { err != null ? <div className="Error">{err}</div> : "" }
       </form>
       </div>
-      <Commits search={this.state.search}/>
+      <Commits search={this.state.search}
+        showHead={this.state.showHead} showStable={this.state.showStable} showProjects={this.state.showProjects} />
       </div>
     );
   }
 }
 
 function Commit(props) {
-  const paths = Array.isArray(props.commit.paths.path) ? props.commit.paths.path : [ props.commit.paths.path ];
+  var paths = Array.isArray(props.commit.paths.path) ? props.commit.paths.path : [ props.commit.paths.path ];
   var msg = props.commit.msg["$"];
   msg = escapeHTML(msg);
   msg = msg.replace(/https?:\/\/\S+/gi, '<a href="$&">$&</a>')
@@ -114,6 +137,24 @@ function Commit(props) {
     } catch(err) {
       console.log("bla: " + err);
     }
+  }
+  console.log(`head: ${props.showHead} stable: ${props.showStable} projects: ${props.showProjects}`);
+  if (!props.showHead) {
+//    console.log("paths1 " + paths.map(p => p["$"]));
+    paths = paths.filter(p => !p["$"].startsWith("/head"));
+  }
+  if (!props.showStable) {
+//    console.log("paths2 " + paths.map(p => p["$"]));
+    paths = paths.filter(p => !p["$"].startsWith("/stable"));
+  }
+  if (!props.showProjects) {
+//    console.log("paths2.1 " + paths.map(p => p["$"]));
+    paths = paths.filter(p => !p["$"].startsWith("/projects"));
+  }
+  console.log("paths3 " + paths.map(p => p["$"]));
+  if (paths.length == 0) {
+    console.log("paths is empty");
+    return null;
   }
   const d = new Date(props.commit.date["$"]).toDateString();
   const separator = d != lastDate;
@@ -200,7 +241,7 @@ console.log('getcommits');
                      + '?version=' + this.state.version
                      + (this.state.commits.length == 0 ? '&head=' + this.state.head : '');
         console.log('fetch ' + name);
-        fetch('freebsd-data/' + name)
+        fetch('https://www.klop.ws/freebsd-data/' + name)
             .then( (response) => {
 		if (!response.ok)
 			throw new Error("Something went wrong...");
@@ -229,7 +270,7 @@ console.log('getcommits');
 //return;
         const name = 'bla.json?nocache=' + Date.now();
 console.log('fetch ' + name);
-        fetch('freebsd-data/' + name)
+        fetch('https://www.klop.ws/freebsd-data/' + name)
             .then( (response) => {
 		if (!response.ok)
 			throw new Error("Something went wrong...");
@@ -260,7 +301,8 @@ console.log('result.start: ' + result.start);
    return (
       <div>
       {commits.map((commit) =>
-        <Commit search={this.props.search} commit={commit} key={commit["@revision"].toString()}/>
+        <Commit search={this.props.search} commit={commit} key={commit["@revision"].toString()}
+          showHead={this.props.showHead} showStable={this.props.showStable} showProjects={this.props.showProjects}/>
       )}
         {error &&
           <div style={{ color: '#900' }}>
