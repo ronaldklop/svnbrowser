@@ -126,7 +126,7 @@ function Commit(props) {
   msg = msg.replace(/https?:\/\/\S+/gi, '<a href="$&">$&</a>')
            .replace(/\br(\d+)\b/gi, '<a href="https://svnweb.freebsd.org/base?view=revision&revision=$1">$&</a>')
            .replace(/(PR:\s*)([0-9]+)/g, '$1<a href="https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=$2">$2</a>')
-           .replace(/([a-z0-9_.-]+)\(([0-9])\)/gi, '<a href="https://www.freebsd.org/cgi/man.cgi?query=$1&apropos=0&sektion=$2&manpath=FreeBSD+12-current&arch=default&format=html">$&</a>')
+           .replace(/([a-z0-9_.+-]+)\(([0-9])\)/gi, '<a href="https://www.freebsd.org/cgi/man.cgi?query=$1&apropos=0&sektion=$2&manpath=FreeBSD+12-current&arch=default&format=html">$&</a>')
            ;
   if (props.search != null && props.search != "") {
     try {
