@@ -269,7 +269,7 @@ console.log('getcommits');
 
   componentDidMount() {
 //return;
-        const name = 'bla.json?nocache=' + Date.now();
+        const name = 'meta.info.json?nocache=' + Date.now();
 console.log('fetch ' + name);
         fetch('https://www.klop.ws/freebsd-data/' + name)
             .then( (response) => {

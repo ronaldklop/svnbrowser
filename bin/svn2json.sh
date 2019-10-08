@@ -27,8 +27,8 @@ do
 		if test $TMPEND -gt $MAX; then
 			TMPEND=$MAX
 		fi
-		svnlite log --xml -r $START:$TMPEND -v ~/src/freebsd-base > $TMPDIR/bla.xml
-		bin/xml2json.py $TMPDIR/bla.xml > $TMPDIR/commits.$START-$END.json
+		svnlite log --xml -r $START:$TMPEND -v ~/src/freebsd-base > $TMPDIR/svn.log.xml
+		bin/xml2json.py $TMPDIR/svn.log.xml > $TMPDIR/commits.$START-$END.json
 		gzip -f $TMPDIR/commits.$START-$END.json
 	fi
 	START=$(( $START + $STEP ))
@@ -39,8 +39,8 @@ echo "{" \
 	\"head\":$MAX, \
 	\"start\":$(($START - $STEP)), \
 	\"step\":$STEP \
-     "}" | gzip > $TMPDIR/bla.json.gz
+     "}" | gzip > $TMPDIR/meta.info.json.gz
 scp -p -i ~/.ssh/webmaster \
 	$(find $TMPDIR -ctime -1d -name "commits.*.json.gz") \
-	$TMPDIR/bla.json.gz \
+	$TMPDIR/meta.info.json.gz \
 	webmaster@klop.ws@ftp.greenhost.nl:klop.ws/www/freebsd-data/
